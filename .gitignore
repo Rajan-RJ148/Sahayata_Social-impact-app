@@ -1,0 +1,8 @@
+node_modules/ 
+ANDROID_STUDIO_GUIDE.md 
+GITHUB_GUIDE.md 
+build/ 
+.dart_tool/
+.flutter-plugins-dependencies
+.metadata
+.idea/
