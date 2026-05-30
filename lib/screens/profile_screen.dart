@@ -193,7 +193,7 @@ class ProfileScreen extends StatelessWidget {
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 1.2,
+                        childAspectRatio: 0.85,
                       ),
                       itemCount: AppConfig.badges.length,
                       itemBuilder: (context, index) {
@@ -210,6 +210,9 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              
+              // Add bottom safe padding to account for bottom navigation
+              const SizedBox(height: 100),
             ],
           ),
         ),

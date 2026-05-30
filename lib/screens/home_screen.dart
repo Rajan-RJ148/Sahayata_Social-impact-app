@@ -6,6 +6,7 @@ import '../models/help_request.dart';
 import '../services/mock_data_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/custom_button.dart';
+import '../widgets/create_help_request_modal.dart';
 
 /// Home Screen with Feed
 class HomeScreen extends StatefulWidget {
@@ -72,21 +73,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            _buildHeader(),
+            // New Header Design
+            _buildNewHeader(),
             
-            // Search and Filter Row
-            _buildSearchAndFilter(),
+            // Location and Filter Row
+            _buildLocationFilterRow(),
             
-            // Tab Bar
-            _buildTabBar(),
+            // Search Bar
+            _buildSearchBar(),
+            
+            // Tab Bar with new styling
+            _buildNewTabBar(),
             
             // Posts List
             Expanded(
               child: _filteredRequests.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 80),
+                      padding: const EdgeInsets.all(16),
                       itemCount: _filteredRequests.length,
                       itemBuilder: (context, index) {
                         return PostCard(
@@ -102,16 +106,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Navigate to create request screen
-        },
+        onPressed: () => showCreateHelpRequestModal(context),
         icon: const Icon(Icons.add),
         label: const Text('Post Help Request'),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildNewHeader() {
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -131,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(width: 12),
-          // App Name and Location
+          // App Name
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,31 +142,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   AppConfig.appName,
                   style: AppTextStyles.h4,
                 ),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      size: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Mumbai, Maharashtra',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
+                Text(
+                  'Connecting Hearts, Changing Lives',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
-            ),
-          ),
-          // Filter Button
-          IconButton(
-            onPressed: _showFilterModal,
-            icon: const Icon(Icons.tune),
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.primary.withOpacity(0.1),
             ),
           ),
         ],
@@ -172,15 +156,48 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildSearchAndFilter() {
+  Widget _buildLocationFilterRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.location_on,
+            size: 18,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'Current Location\nMumbai, Maharashtra',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.3,
+              ),
+              maxLines: 2,
+            ),
+          ),
+          IconButton(
+            onPressed: _showFilterModal,
+            icon: const Icon(Icons.tune),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.surface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: TextField(
         decoration: InputDecoration(
           hintText: 'Search help requests...',
           prefixIcon: const Icon(Icons.search),
           filled: true,
-          fillColor: AppColors.backgroundGray,
+          fillColor: AppColors.surface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
@@ -191,29 +208,39 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildNewTabBar() {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      child: TabBar(
-        controller: _tabController,
-        isScrollable: true,
-        labelColor: AppColors.textWhite,
-        unselectedLabelColor: AppColors.textSecondary,
-        labelStyle: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-        unselectedLabelStyle: AppTextStyles.bodyMedium,
-        indicator: BoxDecoration(
-          gradient: AppColors.blueGradient,
-          borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _tabs.asMap().entries.map((entry) {
+            final index = entry.key;
+            final tab = entry.value;
+            final isSelected = _tabController.index == index;
+            
+            return GestureDetector(
+              onTap: () {
+                _tabController.animateTo(index);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.textPrimary : AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  tab,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: isSelected ? AppColors.textWhite : AppColors.textSecondary,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
-        dividerColor: Colors.transparent,
-        tabs: _tabs.map((tab) {
-          return Tab(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(tab),
-            ),
-          );
-        }).toList(),
       ),
     );
   }

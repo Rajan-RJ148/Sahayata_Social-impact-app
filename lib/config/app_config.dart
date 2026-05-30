@@ -2,7 +2,7 @@
 /// This file contains all configurable constants for the app
 class AppConfig {
   // App Identity - EASILY CHANGEABLE
-  static const String appName = 'HelpConnect';
+  static const String appName = 'Sahayata';
   static const String appTagline = 'Connecting Hearts, Changing Lives';
   
   // Version

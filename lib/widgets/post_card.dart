@@ -5,7 +5,7 @@ import '../utils/app_text_styles.dart';
 import '../utils/helpers.dart';
 import '../config/app_config.dart';
 
-/// Post Card Widget
+/// Enhanced Post Card Widget matching new design
 class PostCard extends StatelessWidget {
   final HelpRequest request;
   final VoidCallback? onTap;
@@ -32,6 +32,7 @@ class PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.only(bottom: 16),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -102,23 +103,48 @@ class PostCard extends StatelessWidget {
                             ],
                           ],
                         ),
-                        Text(
-                          Helpers.formatTimeAgo(request.timestamp),
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              size: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              Helpers.formatTimeAgo(request.timestamp),
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            if (request.distance != null) ...[
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.location_on,
+                                size: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                Helpers.formatDistance(request.distance!),
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  // Distance
-                  if (request.distance != null)
-                    Text(
-                      Helpers.formatDistance(request.distance!),
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
+                  // More icon
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.more_vert),
+                    iconSize: 20,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -151,13 +177,13 @@ class PostCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundGray,
+                      color: AppColors.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '${AppConfig.categoryIcons[request.category]} ${request.category.toLowerCase()}',
                       style: AppTextStyles.badge.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppColors.primary,
                       ),
                     ),
                   ),
@@ -193,21 +219,22 @@ class PostCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  TextButton(
-                    onPressed: () {},
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'View on map',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
                 ],
+              ),
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: () {},
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Click to view on map',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.primary,
+                  ),
+                ),
               ),
               
               // Image (if available)
@@ -215,17 +242,25 @@ class PostCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Container(
+                  child: Image.asset(
+                    request.imageUrl!,
                     height: 200,
                     width: double.infinity,
-                    color: AppColors.backgroundGray,
-                    child: const Center(
-                      child: Icon(
-                        Icons.image,
-                        size: 48,
-                        color: AppColors.textLight,
-                      ),
-                    ),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 200,
+                        width: double.infinity,
+                        color: AppColors.backgroundGray,
+                        child: const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 48,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -260,6 +295,34 @@ class PostCard extends StatelessWidget {
                       '${request.helpersCount} helpers',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              
+              // Action Buttons (only for Needy status)
+              if (request.status == 'Needy') ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.favorite, size: 18),
+                        label: const Text('I Can Help'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.share),
+                      style: IconButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
                       ),
                     ),
                   ],

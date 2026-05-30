@@ -1,25 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'config/theme.dart';
-import 'config/app_config.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/app_state.dart';
 
 void main() {
-  runApp(const HelpConnectApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => AppState(),
+      child: const MyApp(),
+    ),
+  );
 }
 
-class HelpConnectApp extends StatelessWidget {
-  const HelpConnectApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: AppConfig.appName,
+      title: 'HelpConnect',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
-      // For demo purposes, start with onboarding
-      // In production, check if user is logged in
       home: const OnboardingScreen(),
-      // home: const MainScreen(),
     );
   }
 }

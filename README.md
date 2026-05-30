@@ -1,10 +1,20 @@
-# HelpConnect - Connecting Hearts, Changing Lives
+# Sahayata - Connecting Hearts, Changing Lives
 
 A Flutter-based community compassion app that connects people in need with those who can help. Built to facilitate location-based help requests, real-time notifications, and community engagement.
 
 ## 📱 About
 
-HelpConnect is a social impact application designed to help needy individuals (like roadside beggars and those in difficult situations) by connecting them with compassionate community members who can provide assistance in various forms - food, medical aid, shelter, clothing, financial support, or time.
+Sahayata is a social impact application designed to help needy individuals (like roadside beggars and those in difficult situations) by connecting them with compassionate community members who can provide assistance in various forms - food, medical aid, shelter, clothing, financial support, or time.
+
+## 📚 About This Learning Project
+
+> **Transparency Note:** This project began with AI-generated UI code from my Figma design. Rather than starting from scratch or tutorial hell, I am learning Flutter by reverse-engineering, modifying, and extending this codebase over a 30-day journey.
+>
+> You can track my daily progress, learnings, and architectural decisions here:
+> - **[📖 Project Context & Story](CONTEXT.md)** - Design decisions, challenges, and evolution of ideas
+> - **[📝 Daily Learning Log](LEARNING_LOG.md)** - Day-by-day development progress tracker
+
+---
 
 ## ✨ Features
 
@@ -44,13 +54,13 @@ HelpConnect is a social impact application designed to help needy individuals (l
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/helpconnect_app.git
-   cd helpconnect_app
+   git clone https://github.com/YOUR_USERNAME/sahayata_app.git
+   cd sahayata_app
    ```
 
 2. **Install dependencies**
    ```bash
-   flutter pub get
+   git pub get
    ```
 
 3. **Run the app**
@@ -63,13 +73,13 @@ HelpConnect is a social impact application designed to help needy individuals (l
 ```
 lib/
 ├── config/
-│   ├── app_config.dart      # App configuration (CHANGE APP NAME HERE)
-│   └── theme.dart            # App theme and styling
+│   ├── app_config.dart      # App configuration and name declarations
+│   └── theme.dart           # App theme and styling
 ├── models/
-│   ├── user.dart             # User data model
-│   ├── help_request.dart     # Help request model
-│   ├── event.dart            # Community event model
-│   └── chat.dart             # Chat models
+│   ├── user.dart            # User data model
+│   ├── help_request.dart    # Help request model
+│   ├── event.dart           # Community event model
+│   └── chat.dart            # Chat models
 ├── screens/
 │   ├── onboarding_screen.dart
 │   ├── main_screen.dart
@@ -77,12 +87,16 @@ lib/
 │   ├── profile_screen.dart
 │   ├── events_screen.dart
 │   ├── chat_list_screen.dart
+│   ├── chat_conversation_screen.dart
 │   └── impact_screen.dart
 ├── widgets/
 │   ├── bottom_nav_bar.dart
 │   ├── post_card.dart
-│   └── custom_button.dart
+│   ├── custom_button.dart
+│   ├── create_event_modal.dart
+│   └── create_help_request_modal.dart
 ├── services/
+│   ├── app_state.dart          # Simple Provider state management
 │   └── mock_data_service.dart  # Sample data for testing
 ├── utils/
 │   ├── app_colors.dart
@@ -90,26 +104,6 @@ lib/
 │   └── helpers.dart
 └── main.dart
 ```
-
-## 🎨 Customization
-
-### Changing the App Name
-
-The app name is centralized in `lib/config/app_config.dart`:
-
-```dart
-class AppConfig {
-  static const String appName = 'HelpConnect';  // CHANGE THIS
-  static const String appTagline = 'Connecting Hearts, Changing Lives';  // AND THIS
-  // ... rest of config
-}
-```
-
-Simply modify these constants to change the app name throughout the entire application!
-
-### Customizing Colors
-
-All colors are defined in `lib/utils/app_colors.dart`. Modify the color constants to match your brand.
 
 ## 🛠️ Technologies Used
 
@@ -120,10 +114,6 @@ All colors are defined in `lib/utils/app_colors.dart`. Modify the color constant
 - **Image Picker**: Photo uploads
 - **Provider**: State management
 - **Share Plus**: Social media sharing
-
-## 📸 Screenshots
-
-[Screenshots of your app will be added here]
 
 ## 🤝 Contributing
 

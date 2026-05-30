@@ -61,6 +61,9 @@ class AppColors {
     'Education': Color(0xFF6366F1), // Indigo
   };
   
+  // Individual Category Colors (for direct access)
+  static const Color categoryShelter = Color(0xFFF59E0B); // Orange
+  
   // Badge Colors
   static const Color badgeGold = Color(0xFFFBBF24);
   static const Color badgeSilver = Color(0xFFD1D5DB);
@@ -69,6 +72,7 @@ class AppColors {
   // Chat Colors
   static const Color chatSent = Color(0xFF4169E1);
   static const Color chatReceived = Color(0xFFF3F4F6);
+  static const Color chatOther = Color(0xFFF3F4F6); // Same as received
   static const Color chatAnonymous = Color(0xFF8B5CF6);
   
   // Verification Badge

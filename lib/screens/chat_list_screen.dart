@@ -4,6 +4,8 @@ import '../utils/app_text_styles.dart';
 import '../utils/helpers.dart';
 import '../services/mock_data_service.dart';
 import '../models/chat.dart';
+import 'chat_conversation_screen.dart';
+import '../widgets/create_help_request_modal.dart';
 
 /// Chat List Screen
 class ChatListScreen extends StatelessWidget {
@@ -26,7 +28,7 @@ class ChatListScreen extends StatelessWidget {
                 children: [
                   Text('Messages', style: AppTextStyles.h2),
                   ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: () => showCreateHelpRequestModal(context),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Post Help Request'),
                   ),
@@ -57,7 +59,7 @@ class ChatListScreen extends StatelessWidget {
               child: ListView.builder(
                 itemCount: conversations.length,
                 itemBuilder: (context, index) {
-                  return _buildConversationTile(conversations[index]);
+                  return _buildConversationTile(context, conversations[index]);
                 },
               ),
             ),
@@ -67,7 +69,7 @@ class ChatListScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildConversationTile(ChatConversation conversation) {
+  Widget _buildConversationTile(BuildContext context, ChatConversation conversation) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
@@ -159,7 +161,14 @@ class ChatListScreen extends StatelessWidget {
         ],
       ),
       onTap: () {
-        // Navigate to chat screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatConversationScreen(
+              conversation: conversation,
+            ),
+          ),
+        );
       },
     );
   }

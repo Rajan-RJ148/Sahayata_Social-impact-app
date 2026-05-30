@@ -1,14 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../config/app_config.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../utils/helpers.dart';
 import '../services/mock_data_service.dart';
+import '../services/app_state.dart';
 import '../models/event.dart';
+import '../widgets/create_help_request_modal.dart';
+import '../widgets/create_event_modal.dart';
 
-/// Events Screen
-class EventsScreen extends StatelessWidget {
+/// Events Screen with Registration Functionality
+class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
+
+  @override
+  State<EventsScreen> createState() => _EventsScreenState();
+}
+
+class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +50,7 @@ class EventsScreen extends StatelessWidget {
                 children: [
                   Text(AppConfig.appName, style: AppTextStyles.h4),
                   ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: () => showCreateHelpRequestModal(context),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Post Help Request'),
                   ),
@@ -51,7 +74,7 @@ class EventsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: () => showCreateEventModal(context),
                     icon: const Icon(Icons.add),
                     label: const Text('Create Event'),
                   ),
@@ -60,31 +83,27 @@ class EventsScreen extends StatelessWidget {
             ),
             
             // Tab Bar
-            DefaultTabController(
-              length: 2,
-              child: Column(
-                children: [
-                  TabBar(
-                    labelColor: AppColors.primary,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    indicatorColor: AppColors.primary,
-                    tabs: const [
-                      Tab(text: 'Upcoming Events'),
-                      Tab(text: 'My Registrations'),
-                    ],
-                  ),
-                ],
-              ),
+            TabBar(
+              controller: _tabController,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              tabs: const [
+                Tab(text: 'Upcoming Events'),
+                Tab(text: 'My Registrations'),
+              ],
             ),
             
-            // Events List
+            // Tab Views
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: events.length,
-                itemBuilder: (context, index) {
-                  return _buildEventCard(events[index]);
-                },
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  // Upcoming Events
+                  _buildEventsList(events, showAll: true),
+                  // My Registrations
+                  _buildEventsList(events, showAll: false),
+                ],
               ),
             ),
           ],
@@ -93,8 +112,56 @@ class EventsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEventCard(CommunityEvent event) {
+  Widget _buildEventsList(List<CommunityEvent> allEvents, {required bool showAll}) {
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        final events = showAll
+            ? allEvents
+            : allEvents.where((e) => appState.isRegistered(e.id)).toList();
+
+        if (!showAll && events.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.event_busy,
+                  size: 64,
+                  color: AppColors.textLight,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Registrations Yet',
+                  style: AppTextStyles.h4.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Register for events to see them here',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textLight,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: events.length,
+          itemBuilder: (context, index) {
+            return _buildEventCard(events[index], appState);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildEventCard(CommunityEvent event, AppState appState) {
     final isGradient = event.id == '1';
+    final isRegistered = appState.isRegistered(event.id);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -115,7 +182,7 @@ class EventsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isGradient) ...[
+            if (isGradient) ...[ 
               // Gradient Card Style
               Row(
                 children: [
@@ -191,14 +258,27 @@ class EventsScreen extends StatelessWidget {
                 ),
               const SizedBox(height: 12),
               if (event.imageUrl != null)
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundGray,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.image, size: 48, color: AppColors.textLight),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    event.imageUrl!,
+                    height: 150,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 150,
+                        width: double.infinity,
+                        color: AppColors.backgroundGray,
+                        child: const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 48,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               const SizedBox(height: 12),
@@ -223,9 +303,45 @@ class EventsScreen extends StatelessWidget {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: event.isFull ? null : () {},
-                  child: Text(event.isFull ? 'Event Full' : 'Register as Volunteer'),
+                child: ElevatedButton.icon(
+                  onPressed: event.isFull
+                      ? null
+                      : () {
+                          setState(() {
+                            if (isRegistered) {
+                              appState.unregisterFromEvent(event.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Unregistered from ${event.title}'),
+                                  backgroundColor: AppColors.textSecondary,
+                                ),
+                              );
+                            } else {
+                              appState.registerForEvent(event.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Registered for ${event.title}!'),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          });
+                        },
+                  icon: Icon(
+                    isRegistered ? Icons.check_circle : Icons.person_add,
+                  ),
+                  label: Text(
+                    event.isFull
+                        ? 'Event Full'
+                        : isRegistered
+                            ? 'Registered'
+                            : 'Register as Volunteer',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isRegistered
+                        ? AppColors.success
+                        : AppColors.primary,
+                  ),
                 ),
               ),
             ],
