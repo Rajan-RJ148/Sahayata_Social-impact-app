@@ -24,6 +24,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<HelpRequest> _allRequests = [];
   List<HelpRequest> _filteredRequests = [];
 
+  // Persistent Filter State
+  double _currentRadius = AppConfig.defaultRadius;
+  String _selectedCategory = 'All';
+  String _selectedTimeline = 'All'; // 'All', 'Recently Posted', 'This Week', 'This Month'
+
   @override
   void initState() {
     super.initState();
@@ -38,30 +43,51 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _onTabChanged() {
-    if (_tabController.indexIsChanging) {
-      setState(() {
-        _selectedFilter = _tabs[_tabController.index];
-        _filterRequests();
-      });
-    }
+    // Check if the index is changing or has changed to update filter feed correctly
+    setState(() {
+      _selectedFilter = _tabs[_tabController.index];
+      _filterRequests();
+    });
   }
 
   void _filterRequests() {
     setState(() {
-      if (_selectedFilter == 'All Posts') {
-        _filteredRequests = _allRequests;
-      } else if (_selectedFilter == 'Needy') {
-        _filteredRequests = _allRequests.where((r) => r.status == 'Needy').toList();
+      List<HelpRequest> temp = _allRequests;
+
+      // 1. Tab Status Filter
+      if (_selectedFilter == 'Needy') {
+        temp = temp.where((r) => r.status == 'Needy').toList();
       } else if (_selectedFilter == 'Helped') {
-        _filteredRequests = _allRequests.where((r) => r.status == 'Helped').toList();
+        temp = temp.where((r) => r.status == 'Helped').toList();
       } else if (_selectedFilter == 'Upcoming Events') {
-        _filteredRequests = _allRequests.where((r) => r.status == 'Upcoming').toList();
+        temp = temp.where((r) => r.status == 'Upcoming').toList();
       }
+
+      // 2. Category Filter
+      if (_selectedCategory != 'All') {
+        temp = temp.where((r) => r.category == _selectedCategory).toList();
+      }
+
+      // 3. Distance Radius Filter (request.distance in km vs radius in meters)
+      temp = temp.where((r) => r.distance == null || r.distance! <= (_currentRadius / 1000.0)).toList();
+
+      // 4. Timeline Filter
+      final now = DateTime.now();
+      if (_selectedTimeline == 'Recently Posted') {
+        temp = temp.where((r) => now.difference(r.timestamp).inHours <= 24).toList();
+      } else if (_selectedTimeline == 'This Week') {
+        temp = temp.where((r) => now.difference(r.timestamp).inDays <= 7).toList();
+      } else if (_selectedTimeline == 'This Month') {
+        temp = temp.where((r) => now.difference(r.timestamp).inDays <= 30).toList();
+      }
+
+      _filteredRequests = temp;
     });
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -182,6 +208,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             icon: const Icon(Icons.tune),
             style: IconButton.styleFrom(
               backgroundColor: AppColors.surface,
+              side: const BorderSide(color: AppColors.border),
             ),
           ),
         ],
@@ -197,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           hintText: 'Search help requests...',
           prefixIcon: const Icon(Icons.search),
           filled: true,
-          fillColor: AppColors.surface,
+          fillColor: AppColors.backgroundGray,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
@@ -206,6 +233,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
       ),
     );
+  }
+
+  Color _getTabColor(String tab, bool isSelected) {
+    if (!isSelected) return AppColors.surface;
+    switch (tab) {
+      case 'All Posts':
+        return AppColors.primary; // Blue
+      case 'Needy':
+        return AppColors.urgent; // Red
+      case 'Helped':
+        return AppColors.success; // Green
+      case 'Upcoming Events':
+        return AppColors.upcoming; // Purple
+      default:
+        return AppColors.primary;
+    }
   }
 
   Widget _buildNewTabBar() {
@@ -227,8 +270,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.textPrimary : AppColors.surface,
+                  color: _getTabColor(tab, isSelected),
                   borderRadius: BorderRadius.circular(20),
+                  border: isSelected ? null : Border.all(color: AppColors.border),
                 ),
                 child: Text(
                   tab,
@@ -264,7 +308,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 8),
           Text(
-            'Be the first to post a help request',
+            'Be the first to post a help request or adjust filters',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textLight,
             ),
@@ -275,87 +319,198 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _showFilterModal() {
+    double tempRadius = _currentRadius;
+    String tempCategory = _selectedCategory;
+    String tempTimeline = _selectedTimeline;
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            double _radius = AppConfig.defaultRadius;
-            Set<String> _selectedCategories = {'All'};
-
             return Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Filters', style: AppTextStyles.h3),
-                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.between,
+                    children: [
+                      Text('Filters', style: AppTextStyles.h3),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: AppColors.divider),
+                  const SizedBox(height: 16),
                   
                   // Radius Slider
-                  Text('Radius', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.between,
+                    children: [
+                      Text('Distance Radius', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        '${(tempRadius / 1000).toStringAsFixed(1)} km',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
-                  Slider(
-                    value: _radius,
-                    min: AppConfig.minRadius,
-                    max: AppConfig.maxRadius,
-                    divisions: 19,
-                    label: '${(_radius / 1000).toStringAsFixed(1)} km',
-                    onChanged: (value) {
-                      setModalState(() {
-                        _radius = value;
-                      });
-                    },
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: AppColors.success,
+                      inactiveTrackColor: AppColors.success.withOpacity(0.2),
+                      thumbColor: AppColors.success,
+                      overlayColor: AppColors.success.withOpacity(0.1),
+                      valueIndicatorColor: AppColors.success,
+                      valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+                    ),
+                    child: Slider(
+                      value: tempRadius,
+                      min: AppConfig.minRadius,
+                      max: AppConfig.maxRadius,
+                      divisions: 19,
+                      label: '${(tempRadius / 1000).toStringAsFixed(1)} km',
+                      onChanged: (value) {
+                        setModalState(() {
+                          tempRadius = value;
+                        });
+                      },
+                    ),
                   ),
-                  Text(
-                    '${(_radius / 1000).toStringAsFixed(1)} km',
-                    style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   
-                  // Category Chips
+                  // Category Section
                   Text('Category', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: ['All', ...AppConfig.categories].map((category) {
-                      final isSelected = _selectedCategories.contains(category);
-                      return FilterChip(
+                      final isSelected = tempCategory == category;
+                      return ChoiceChip(
                         label: Text(category),
                         selected: isSelected,
+                        selectedColor: AppColors.primary,
+                        backgroundColor: AppColors.backgroundGray,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : AppColors.textPrimary,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: isSelected ? Colors.transparent : AppColors.border,
+                          ),
+                        ),
                         onSelected: (selected) {
-                          setModalState(() {
-                            if (category == 'All') {
-                              _selectedCategories = {'All'};
-                            } else {
-                              _selectedCategories.remove('All');
-                              if (selected) {
-                                _selectedCategories.add(category);
-                              } else {
-                                _selectedCategories.remove(category);
-                              }
-                              if (_selectedCategories.isEmpty) {
-                                _selectedCategories = {'All'};
-                              }
-                            }
-                          });
+                          if (selected) {
+                            setModalState(() {
+                              tempCategory = category;
+                            });
+                          }
                         },
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   
-                  // Apply Button
-                  CustomButton(
-                    text: 'Apply Filters',
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // Apply filters logic here
-                    },
+                  // Timeline Section
+                  Text('Timeline', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: ['All', 'Recently Posted', 'This Week', 'This Month'].map((timeline) {
+                      final isSelected = tempTimeline == timeline;
+                      return ChoiceChip(
+                        label: Text(timeline),
+                        selected: isSelected,
+                        selectedColor: AppColors.primary,
+                        backgroundColor: AppColors.backgroundGray,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : AppColors.textPrimary,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: isSelected ? Colors.transparent : AppColors.border,
+                          ),
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setModalState(() {
+                              tempTimeline = timeline;
+                            });
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 28),
+                  
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            setModalState(() {
+                              tempRadius = AppConfig.defaultRadius;
+                              tempCategory = 'All';
+                              tempTimeline = 'All';
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: AppColors.border),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Reset', style: TextStyle(color: AppColors.textPrimary)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _currentRadius = tempRadius;
+                              _selectedCategory = tempCategory;
+                              _selectedTimeline = tempTimeline;
+                              _filterRequests();
+                            });
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Apply Filters', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
