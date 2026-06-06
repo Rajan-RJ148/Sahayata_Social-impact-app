@@ -4,6 +4,7 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../widgets/custom_button.dart';
 import 'main_screen.dart';
+import 'login_screen.dart';
 
 /// Onboarding Screen with Safety Guidelines
 class OnboardingScreen extends StatelessWidget {
@@ -146,7 +147,7 @@ class OnboardingScreen extends StatelessWidget {
                       onPressed: () {
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
-                            builder: (context) => const MainScreen(),
+                            builder: (context) => const LoginScreen(),
                           ),
                         );
                       },

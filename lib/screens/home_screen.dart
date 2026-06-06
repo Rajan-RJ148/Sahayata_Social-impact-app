@@ -345,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Filters', style: AppTextStyles.h3),
                       IconButton(
@@ -359,7 +359,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   
                   // Radius Slider
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Distance Radius', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
                       Text(
@@ -415,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(
+                          side: BorderSide(
                             color: isSelected ? Colors.transparent : AppColors.border,
                           ),
                         ),
@@ -450,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(
+                          side: BorderSide(
                             color: isSelected ? Colors.transparent : AppColors.border,
                           ),
                         ),
