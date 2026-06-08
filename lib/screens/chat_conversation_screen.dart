@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../utils/helpers.dart';
-import '../models/chat.dart';
-import '../models/user.dart';
+import '../services/chat_repository.dart';
 
 /// Enhanced Chat Conversation Screen matching new design
 class ChatConversationScreen extends StatefulWidget {
-  final ChatConversation conversation;
+  final String conversationId;
+  final String otherUserName;
+  final String otherUserAvatar;
+  final bool otherUserVerified;
 
   const ChatConversationScreen({
     super.key,
-    required this.conversation,
+    required this.conversationId,
+    required this.otherUserName,
+    required this.otherUserAvatar,
+    required this.otherUserVerified,
   });
 
   @override
@@ -20,67 +26,30 @@ class ChatConversationScreen extends StatefulWidget {
 
 class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final List<ChatMessage> _messages = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-  }
-
-  void _loadMessages() {
-    // Sample messages matching screenshot
-    _messages.addAll([
-      ChatMessage(
-        id: '1',
-        text: 'Hi! I saw your post about needing food assistance.',
-        isSent: false,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-      ),
-      ChatMessage(
-        id: '2',
-        text: 'Yes, thank you for reaching out!',
-        isSent: true,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 28)),
-        hasReaction: true,
-        reaction: '👍',
-      ),
-      ChatMessage(
-        id: '3',
-        text: 'I can bring some groceries today around 3 PM. Does that work?',
-        isSent: false,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 27)),
-      ),
-      ChatMessage(
-        id: '4',
-        text: 'That would be wonderful! The location is near Station Road.',
-        isSent: true,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 25)),
-        hasReaction: true,
-        reaction: '👍',
-      ),
-      ChatMessage(
-        id: '5',
-        text: 'Perfect! See you then 🙏',
-        isSent: false,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 24)),
-      ),
-    ]);
-  }
-
-  void _sendMessage() {
+  void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
-
-    setState(() {
-      _messages.add(ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: _messageController.text.trim(),
-        isSent: true,
-        timestamp: DateTime.now(),
-      ));
-    });
-
+    
+    final text = _messageController.text.trim();
     _messageController.clear();
+    
+    try {
+      await ChatRepository().sendMessage(widget.conversationId, {
+        'senderId': FirebaseAuth.instance.currentUser?.uid ?? '',
+        'text': text,
+        'timestamp': DateTime.now(),
+        'type': 'text',
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            backgroundColor: AppColors.urgent,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -113,11 +82,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 children: [
                   Center(
                     child: Text(
-                      widget.conversation.otherUser.avatar ?? '👤',
+                      widget.otherUserAvatar,
                       style: const TextStyle(fontSize: 20),
                     ),
                   ),
-                  if (widget.conversation.otherUser.isVerified)
+                  if (widget.otherUserVerified)
                     Positioned(
                       right: 0,
                       bottom: 0,
@@ -143,7 +112,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.conversation.otherUser.name,
+                    widget.otherUserName,
                     style: AppTextStyles.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -194,13 +163,34 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
           ),
           
-          // Messages List
+          // Messages List Stream
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return _buildMessageBubble(_messages[index]);
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: ChatRepository().getMessagesStream(widget.conversationId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                }
+                
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet. Send a message to start the conversation!',
+                      style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                
+                final messages = snapshot.data!;
+                
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    return _buildMessageBubble(messages[index]);
+                  },
+                );
               },
             ),
           ),
@@ -282,21 +272,35 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message) {
+  Widget _buildMessageBubble(Map<String, dynamic> messageMap) {
+    final text = messageMap['text'] ?? '';
+    final reaction = messageMap['reaction'];
+    final hasReaction = messageMap['hasReaction'] ?? (reaction != null);
+    
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    // Determine alignment by checking senderId, fallback safely onto isSent mock flag
+    final isSent = (messageMap['senderId'] != null && currentUserId != null && messageMap['senderId'] == currentUserId) ||
+                   (messageMap['isSent'] == true);
+                   
+    final timeRaw = messageMap['timestamp'];
+    final timestamp = timeRaw is DateTime 
+        ? timeRaw 
+        : (timeRaw is Timestamp ? timeRaw.toDate() : DateTime.now());
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
-        crossAxisAlignment: message.isSent
+        crossAxisAlignment: isSent
             ? CrossAxisAlignment.end
             : CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: message.isSent
+            mainAxisAlignment: isSent
                 ? MainAxisAlignment.end
                 : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (!message.isSent) ...[
+              if (!isSent) ...[
                 Container(
                   width: 32,
                   height: 32,
@@ -306,7 +310,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   ),
                   child: Center(
                     child: Text(
-                      widget.conversation.otherUser.avatar ?? '👤',
+                      widget.otherUserAvatar,
                       style: const TextStyle(fontSize: 16),
                     ),
                   ),
@@ -320,50 +324,50 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: message.isSent
+                    color: isSent
                         ? AppColors.primary
                         : AppColors.chatOther,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
-                      bottomLeft: message.isSent
+                      bottomLeft: isSent
                           ? const Radius.circular(16)
                           : const Radius.circular(4),
-                      bottomRight: message.isSent
+                      bottomRight: isSent
                           ? const Radius.circular(4)
                           : const Radius.circular(16),
                     ),
                   ),
                   child: Text(
-                    message.text,
+                    text,
                     style: AppTextStyles.bodyMedium.copyWith(
-                      color: message.isSent
+                      color: isSent
                           ? AppColors.textWhite
                           : AppColors.textPrimary,
                     ),
                   ),
                 ),
               ),
-              if (message.isSent) const SizedBox(width: 8),
+              if (isSent) const SizedBox(width: 8),
             ],
           ),
           const SizedBox(height: 4),
           Padding(
             padding: EdgeInsets.only(
-              left: message.isSent ? 0 : 40,
-              right: message.isSent ? 8 : 0,
+              left: isSent ? 0 : 40,
+              right: isSent ? 8 : 0,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  _formatTime(message.timestamp),
+                  _formatTime(timestamp),
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.textLight,
                     fontSize: 11,
                   ),
                 ),
-                if (message.hasReaction && message.reaction != null) ...[
+                if (hasReaction && reaction != null) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -379,7 +383,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       ),
                     ),
                     child: Text(
-                      message.reaction!,
+                      reaction.toString(),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
@@ -396,6 +400,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final hour = time.hour > 12 ? time.hour - 12 : time.hour;
     final period = time.hour >= 12 ? 'PM' : 'AM';
     final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute $period';
+    return '${hour == 0 ? 12 : hour}:$minute $period';
   }
 }

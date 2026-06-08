@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math' as math;
 import '../config/app_config.dart';
 import '../utils/app_colors.dart';
@@ -12,54 +13,70 @@ class ImpactScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stats = MockDataService.getImpactStats();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(AppConfig.appName, style: AppTextStyles.h3),
-                    ElevatedButton.icon(
-                      onPressed: () => showCreateHelpRequestModal(context),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Post Help Request'),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Community Impact Dashboard Header
-              _buildImpactDashboardHeader(),
-              
-              // Summary Stats Cards Row
-              _buildSummaryStatsRow(stats),
+        child: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('analytics').doc('global').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
 
-              // Monthly Trend Chart
-              _buildMonthlyTrendSection(),
-              
-              // Help by Category (Donut Chart)
-              _buildCategoryChart(),
-              
-              // Community Need Density (Bar Chart)
-              _buildCommunityDensityChart(),
-              
-              // Top Contributors
-              _buildLeaderboardSection(),
-              
-              // Recent Success Stories
-              _buildSuccessStoriesSection(),
-              
-              const SizedBox(height: 80),
-            ],
-          ),
+            final data = snapshot.hasData && snapshot.data!.exists 
+                ? (snapshot.data!.data() as Map<String, dynamic>?) 
+                : null;
+                
+            // Strict Fallback Constraint
+            final stats = data ?? MockDataService.getImpactStats();
+
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppConfig.appName, style: AppTextStyles.h3),
+                        ElevatedButton.icon(
+                          onPressed: () => showCreateHelpRequestModal(context),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Post Help Request'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Community Impact Dashboard Header
+                  _buildImpactDashboardHeader(),
+                  
+                  // Summary Stats Cards Row
+                  _buildSummaryStatsRow(stats),
+
+                  // Monthly Trend Chart
+                  _buildMonthlyTrendSection(stats['monthlyTrend'] as List<dynamic>?),
+                  
+                  // Help by Category (Donut Chart)
+                  _buildCategoryChart(stats['categoryDistribution'] as Map<String, dynamic>?),
+                  
+                  // Community Need Density (Bar Chart)
+                  _buildCommunityDensityChart(stats['needDensity'] as Map<String, dynamic>?),
+                  
+                  // Top Contributors
+                  _buildLeaderboardSection(),
+                  
+                  // Recent Success Stories
+                  _buildSuccessStoriesSection(),
+                  
+                  const SizedBox(height: 80),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -103,7 +120,7 @@ class ImpactScreen extends StatelessWidget {
               Expanded(
                 child: _buildSummaryCard(
                   icon: Icons.favorite_outline,
-                  value: stats['totalHelps'].toString(),
+                  value: (stats['totalHelps'] ?? 0).toString(),
                   label: 'Total Helps',
                   color: AppColors.urgent,
                 ),
@@ -112,7 +129,7 @@ class ImpactScreen extends StatelessWidget {
               Expanded(
                 child: _buildSummaryCard(
                   icon: Icons.people_outline,
-                  value: stats['activeVolunteers'].toString(),
+                  value: (stats['activeVolunteers'] ?? 0).toString(),
                   label: 'Active Volunteers',
                   color: AppColors.primary,
                 ),
@@ -125,7 +142,7 @@ class ImpactScreen extends StatelessWidget {
               Expanded(
                 child: _buildSummaryCard(
                   icon: Icons.access_time,
-                  value: stats['hoursContributed'].toString(),
+                  value: (stats['hoursContributed'] ?? 0).toString(),
                   label: 'Hours Contributed',
                   color: AppColors.upcoming,
                 ),
@@ -134,7 +151,7 @@ class ImpactScreen extends StatelessWidget {
               Expanded(
                 child: _buildSummaryCard(
                   icon: Icons.location_on_outlined,
-                  value: stats['citiesReached'].toString(),
+                  value: (stats['citiesReached'] ?? 0).toString(),
                   label: 'Cities Reached',
                   color: AppColors.secondary,
                 ),
@@ -186,7 +203,11 @@ class ImpactScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMonthlyTrendSection() {
+  Widget _buildMonthlyTrendSection(List<dynamic>? trendData) {
+    // If not provided from firestore mapping, fallback locally
+    final defaultTrend = MockDataService.getImpactStats()['monthlyTrend'] as List<dynamic>;
+    final dataToUse = trendData ?? defaultTrend;
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -211,7 +232,7 @@ class ImpactScreen extends StatelessWidget {
             height: 200,
             child: CustomPaint(
               size: const Size(double.infinity, 200),
-              painter: LineChartPainter(),
+              painter: LineChartPainter(dataToUse),
             ),
           ),
         ],
@@ -219,13 +240,15 @@ class ImpactScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCategoryChart() {
+  Widget _buildCategoryChart(Map<String, dynamic>? categoryDistribution) {
+    final dist = categoryDistribution ?? MockDataService.getImpactStats()['categoryDistribution'] as Map<String, dynamic>;
+    
     final categories = [
-      {'name': 'Food', 'value': 450, 'color': AppColors.primary},
-      {'name': 'Medical', 'value': 280, 'color': AppColors.urgent},
-      {'name': 'Shelter', 'value': 210, 'color': AppColors.categoryShelter},
-      {'name': 'Clothing', 'value': 180, 'color': AppColors.success},
-      {'name': 'Education', 'value': 128, 'color': AppColors.upcoming},
+      {'name': 'Food', 'value': dist['Food'] ?? 0, 'color': AppColors.primary},
+      {'name': 'Medical', 'value': dist['Medical'] ?? 0, 'color': AppColors.urgent},
+      {'name': 'Shelter', 'value': dist['Shelter'] ?? 0, 'color': AppColors.categoryShelter},
+      {'name': 'Clothing', 'value': dist['Clothing'] ?? 0, 'color': AppColors.success},
+      {'name': 'Education', 'value': dist['Education'] ?? 0, 'color': AppColors.upcoming},
     ];
 
     return Container(
@@ -289,13 +312,15 @@ class ImpactScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCommunityDensityChart() {
+  Widget _buildCommunityDensityChart(Map<String, dynamic>? needDensity) {
+    final density = needDensity ?? MockDataService.getImpactStats()['needDensity'] as Map<String, dynamic>;
+    
     final cities = [
-      {'name': 'Andheri', 'value': 45},
-      {'name': 'Bandra', 'value': 38},
-      {'name': 'Dadar', 'value': 52},
-      {'name': 'Powai', 'value': 28},
-      {'name': 'Thane', 'value': 35},
+      {'name': 'Andheri', 'value': density['Andheri'] ?? 0},
+      {'name': 'Bandra', 'value': density['Bandra'] ?? 0},
+      {'name': 'Dadar', 'value': density['Dadar'] ?? 0},
+      {'name': 'Powai', 'value': density['Powai'] ?? 0},
+      {'name': 'Thane', 'value': density['Thane'] ?? 0},
     ];
     final maxValue = 60.0;
 
@@ -326,7 +351,7 @@ class ImpactScreen extends StatelessWidget {
               children: cities.map((city) {
                 return _buildDensityBar(
                   city['name'] as String,
-                  (city['value'] as int).toDouble(),
+                  (city['value'] as num).toDouble(),
                   maxValue,
                 );
               }).toList(),
@@ -338,7 +363,7 @@ class ImpactScreen extends StatelessWidget {
   }
 
   Widget _buildDensityBar(String name, double value, double maxValue) {
-    final percentage = value / maxValue;
+    final percentage = (value / maxValue).clamp(0.0, 1.0);
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -357,9 +382,9 @@ class ImpactScreen extends StatelessWidget {
             Container(
               width: double.infinity,
               height: 150 * percentage,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.upcoming,
-                borderRadius: const BorderRadius.vertical(
+                borderRadius: BorderRadius.vertical(
                   top: Radius.circular(4),
                 ),
               ),
@@ -549,21 +574,36 @@ class ImpactScreen extends StatelessWidget {
 
 /// Line Chart Painter
 class LineChartPainter extends CustomPainter {
+  final List<dynamic> monthlyData;
+
+  LineChartPainter(this.monthlyData);
+
   @override
   void paint(Canvas canvas, Size size) {
+    if (monthlyData.isEmpty) return;
+
     final paint = Paint()
       ..color = AppColors.primary
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
-    final points = [
-      Offset(0, size.height * 0.6),
-      Offset(size.width * 0.2, size.height * 0.45),
-      Offset(size.width * 0.4, size.height * 0.30),
-      Offset(size.width * 0.6, size.height * 0.20),
-      Offset(size.width * 0.8, size.height * 0.10),
-      Offset(size.width, size.height * 0.05),
-    ];
+    // Dynamically calculate points based on provided stats
+    final maxHelps = monthlyData.fold<double>(
+      0.0, 
+      (max, item) => item['helps'] > max ? (item['helps'] as num).toDouble() : max
+    );
+    final ceiling = (maxHelps == 0 ? 220 : maxHelps) * 1.2;
+
+    List<Offset> points = [];
+    for (int i = 0; i < monthlyData.length; i++) {
+      final item = monthlyData[i];
+      final val = (item['helps'] as num).toDouble();
+      
+      final x = size.width * (i / (monthlyData.length > 1 ? monthlyData.length - 1 : 1));
+      final y = size.height * (1 - (val / ceiling)).clamp(0.0, 1.0);
+      
+      points.add(Offset(x, y));
+    }
 
     final path = Path();
     path.moveTo(points[0].dx, points[0].dy);
@@ -588,10 +628,9 @@ class LineChartPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
 
-    final months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    for (int i = 0; i < months.length; i++) {
+    for (int i = 0; i < monthlyData.length; i++) {
       textPainter.text = TextSpan(
-        text: months[i],
+        text: monthlyData[i]['month'] ?? '',
         style: AppTextStyles.caption.copyWith(
           color: AppColors.textSecondary,
         ),
@@ -600,14 +639,21 @@ class LineChartPainter extends CustomPainter {
       textPainter.paint(
         canvas,
         Offset(
-          size.width * (i / 5) - textPainter.width / 2,
+          size.width * (i / (monthlyData.length > 1 ? monthlyData.length - 1 : 1)) - textPainter.width / 2,
           size.height - 20,
         ),
       );
     }
 
     // Draw y-axis labels
-    final values = ['0', '55', '110', '165', '220'];
+    final values = [
+      '0', 
+      (ceiling * 0.25).toInt().toString(), 
+      (ceiling * 0.50).toInt().toString(), 
+      (ceiling * 0.75).toInt().toString(), 
+      ceiling.toInt().toString()
+    ];
+    
     for (int i = 0; i < values.length; i++) {
       textPainter.text = TextSpan(
         text: values[i],
@@ -627,7 +673,7 @@ class LineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 /// Donut Chart Painter
@@ -644,13 +690,15 @@ class DonutChartPainter extends CustomPainter {
 
     final total = categories.fold<double>(
       0,
-      (sum, cat) => sum + (cat['value'] as int).toDouble(),
+      (sum, cat) => sum + (cat['value'] as num).toDouble(),
     );
+
+    if (total == 0) return; // Prevent zero-division crash
 
     double startAngle = -math.pi / 2;
 
     for (final category in categories) {
-      final value = (category['value'] as int).toDouble();
+      final value = (category['value'] as num).toDouble();
       final sweepAngle = (value / total) * 2 * math.pi;
 
       final paint = Paint()

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../utils/helpers.dart';
-import '../services/mock_data_service.dart';
-import '../models/chat.dart';
+import '../services/chat_repository.dart';
 import 'chat_conversation_screen.dart';
 import '../widgets/create_help_request_modal.dart';
 
@@ -13,8 +14,6 @@ class ChatListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final conversations = MockDataService.getChatConversations();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -54,12 +53,39 @@ class ChatListScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
-            // Conversations List
+            // Conversations List Stream
             Expanded(
-              child: ListView.builder(
-                itemCount: conversations.length,
-                itemBuilder: (context, index) {
-                  return _buildConversationTile(context, conversations[index]);
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: ChatRepository().getConversationsStream(FirebaseAuth.instance.currentUser?.uid ?? ''),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_outline, size: 64, color: AppColors.textLight),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No Messages Yet',
+                            style: AppTextStyles.h4.copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final conversations = snapshot.data!;
+
+                  return ListView.builder(
+                    itemCount: conversations.length,
+                    itemBuilder: (context, index) {
+                      return _buildConversationTile(context, conversations[index]);
+                    },
+                  );
                 },
               ),
             ),
@@ -69,7 +95,21 @@ class ChatListScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildConversationTile(BuildContext context, ChatConversation conversation) {
+  Widget _buildConversationTile(BuildContext context, Map<String, dynamic> conversation) {
+    final otherUserName = conversation['otherUserName'] ?? 'Unknown User';
+    final otherUserAvatar = conversation['otherUserAvatar'] ?? '👤';
+    final otherUserVerified = conversation['otherUserVerified'] ?? false;
+    final lastMessage = conversation['lastMessage'] ?? '';
+    final category = conversation['category'] ?? 'General';
+    final unreadCount = conversation['unreadCount'] ?? 0;
+    final id = conversation['id'] ?? '';
+    
+    final lastMessageTime = conversation['lastMessageTime'] is DateTime 
+        ? conversation['lastMessageTime']
+        : (conversation['lastMessageTime'] is Timestamp 
+            ? conversation['lastMessageTime'].toDate() 
+            : DateTime.now());
+
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
@@ -83,12 +123,12 @@ class ChatListScreen extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                conversation.otherUser.avatar ?? '👤',
+                otherUserAvatar,
                 style: const TextStyle(fontSize: 24),
               ),
             ),
           ),
-          if (conversation.otherUser.isVerified)
+          if (otherUserVerified)
             Positioned(
               right: 0,
               bottom: 0,
@@ -110,20 +150,20 @@ class ChatListScreen extends StatelessWidget {
       title: Row(
         children: [
           Text(
-            conversation.otherUser.name,
+            otherUserName,
             style: AppTextStyles.bodyMedium.copyWith(
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            Helpers.formatTimeAgo(conversation.lastMessageTime),
+            Helpers.formatTimeAgo(lastMessageTime),
             style: AppTextStyles.caption.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
           const Spacer(),
-          if (conversation.unreadCount > 0)
+          if (unreadCount > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: const BoxDecoration(
@@ -131,7 +171,7 @@ class ChatListScreen extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Text(
-                conversation.unreadCount.toString(),
+                unreadCount.toString(),
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.textWhite,
                   fontWeight: FontWeight.w600,
@@ -144,7 +184,7 @@ class ChatListScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            conversation.lastMessage,
+            lastMessage,
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
             ),
@@ -153,7 +193,7 @@ class ChatListScreen extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Re: ${conversation.category}',
+            'Re: $category',
             style: AppTextStyles.caption.copyWith(
               color: AppColors.primary,
             ),
@@ -165,7 +205,10 @@ class ChatListScreen extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (context) => ChatConversationScreen(
-              conversation: conversation,
+              conversationId: id,
+              otherUserName: otherUserName,
+              otherUserAvatar: otherUserAvatar,
+              otherUserVerified: otherUserVerified,
             ),
           ),
         );

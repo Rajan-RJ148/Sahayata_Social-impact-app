@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/app_config.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../utils/helpers.dart';
-import '../services/mock_data_service.dart';
 import '../services/app_state.dart';
+import '../services/event_repository.dart';
 import '../models/event.dart';
 import '../widgets/create_help_request_modal.dart';
 import '../widgets/create_event_modal.dart';
@@ -35,8 +37,6 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final events = MockDataService.getEvents();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -100,9 +100,9 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
                 controller: _tabController,
                 children: [
                   // Upcoming Events
-                  _buildEventsList(events, showAll: true),
+                  _buildEventsList(showAll: true),
                   // My Registrations
-                  _buildEventsList(events, showAll: false),
+                  _buildEventsList(showAll: false),
                 ],
               ),
             ),
@@ -112,14 +112,15 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildEventsList(List<CommunityEvent> allEvents, {required bool showAll}) {
-    return Consumer<AppState>(
-      builder: (context, appState, child) {
-        final events = showAll
-            ? allEvents
-            : allEvents.where((e) => appState.isRegistered(e.id)).toList();
+  Widget _buildEventsList({required bool showAll}) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: EventRepository().getEventsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+        }
 
-        if (!showAll && events.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -131,16 +132,9 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'No Registrations Yet',
+                  'No Events Found',
                   style: AppTextStyles.h4.copyWith(
                     color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Register for events to see them here',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textLight,
                   ),
                 ),
               ],
@@ -148,11 +142,70 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: events.length,
-          itemBuilder: (context, index) {
-            return _buildEventCard(events[index], appState);
+        return Consumer<AppState>(
+          builder: (context, appState, child) {
+            // Map the raw Firestore dictionary back to our UI CommunityEvent structure
+            final List<CommunityEvent> allMappedEvents = snapshot.data!.map((event) {
+              return CommunityEvent(
+                id: event['id'] ?? '',
+                organizerId: event['organizerUid'] ?? '',
+                organizer: event['organizerName'] ?? 'Unknown',
+                organizerAvatar: event['organizerAvatar'] ?? '👤',
+                title: event['title'] ?? '',
+                description: event['description'] ?? '',
+                date: event['date'] is DateTime 
+                    ? event['date'] 
+                    : (event['date'] is Timestamp ? event['date'].toDate() : DateTime.now()),
+                time: event['time'],
+                location: event['locationName'] ?? 'Unknown Location',
+                volunteersNeeded: event['volunteersNeeded'] ?? 0,
+                volunteersRegistered: event['volunteersRegistered'] ?? 0,
+                imageUrl: event['imageUrl'],
+                isNGOVerified: event['isNGOVerified'] ?? false,
+                category: event['category'] ?? 'General',
+              );
+            }).toList();
+
+            final events = showAll
+                ? allMappedEvents
+                : allMappedEvents.where((e) => appState.isRegistered(e.id)).toList();
+
+            if (!showAll && events.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.event_busy,
+                      size: 64,
+                      color: AppColors.textLight,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No Registrations Yet',
+                      style: AppTextStyles.h4.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Register for events to see them here',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.textLight,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: events.length,
+              itemBuilder: (context, index) {
+                return _buildEventCard(events[index], appState);
+              },
+            );
           },
         );
       },
@@ -307,25 +360,29 @@ class _EventsScreenState extends State<EventsScreen> with SingleTickerProviderSt
                   onPressed: event.isFull
                       ? null
                       : () {
-                          setState(() {
-                            if (isRegistered) {
-                              appState.unregisterFromEvent(event.id);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Unregistered from ${event.title}'),
-                                  backgroundColor: AppColors.textSecondary,
-                                ),
-                              );
-                            } else {
-                              appState.registerForEvent(event.id);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Registered for ${event.title}!'),
-                                  backgroundColor: AppColors.success,
-                                ),
-                              );
-                            }
-                          });
+                          if (isRegistered) {
+                            appState.unregisterFromEvent(event.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Unregistered from ${event.title}'),
+                                backgroundColor: AppColors.textSecondary,
+                              ),
+                            );
+                          } else {
+                            // Wire the backend logic first
+                            EventRepository().registerForEvent(
+                              event.id, 
+                              FirebaseAuth.instance.currentUser?.uid ?? '',
+                            );
+                            // Followed by optimistic UI update
+                            appState.registerForEvent(event.id);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Registered for ${event.title}!'),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          }
                         },
                   icon: Icon(
                     isRegistered ? Icons.check_circle : Icons.person_add,

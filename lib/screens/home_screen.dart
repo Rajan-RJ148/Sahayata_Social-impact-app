@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/app_config.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../models/help_request.dart';
-import '../services/mock_data_service.dart';
+import '../services/help_request_repository.dart';
 import '../widgets/post_card.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/create_help_request_modal.dart';
@@ -20,9 +21,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late TabController _tabController;
   String _selectedFilter = 'All Posts';
   final List<String> _tabs = ['All Posts', 'Needy', 'Helped', 'Upcoming Events'];
-  
-  List<HelpRequest> _allRequests = [];
-  List<HelpRequest> _filteredRequests = [];
 
   // Persistent Filter State
   double _currentRadius = AppConfig.defaultRadius;
@@ -34,55 +32,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(_onTabChanged);
-    _loadData();
-  }
-
-  void _loadData() {
-    _allRequests = MockDataService.getHelpRequests();
-    _filterRequests();
   }
 
   void _onTabChanged() {
     // Check if the index is changing or has changed to update filter feed correctly
     setState(() {
       _selectedFilter = _tabs[_tabController.index];
-      _filterRequests();
     });
   }
 
   void _filterRequests() {
-    setState(() {
-      List<HelpRequest> temp = _allRequests;
-
-      // 1. Tab Status Filter
-      if (_selectedFilter == 'Needy') {
-        temp = temp.where((r) => r.status == 'Needy').toList();
-      } else if (_selectedFilter == 'Helped') {
-        temp = temp.where((r) => r.status == 'Helped').toList();
-      } else if (_selectedFilter == 'Upcoming Events') {
-        temp = temp.where((r) => r.status == 'Upcoming').toList();
-      }
-
-      // 2. Category Filter
-      if (_selectedCategory != 'All') {
-        temp = temp.where((r) => r.category == _selectedCategory).toList();
-      }
-
-      // 3. Distance Radius Filter (request.distance in km vs radius in meters)
-      temp = temp.where((r) => r.distance == null || r.distance! <= (_currentRadius / 1000.0)).toList();
-
-      // 4. Timeline Filter
-      final now = DateTime.now();
-      if (_selectedTimeline == 'Recently Posted') {
-        temp = temp.where((r) => now.difference(r.timestamp).inHours <= 24).toList();
-      } else if (_selectedTimeline == 'This Week') {
-        temp = temp.where((r) => now.difference(r.timestamp).inDays <= 7).toList();
-      } else if (_selectedTimeline == 'This Month') {
-        temp = temp.where((r) => now.difference(r.timestamp).inDays <= 30).toList();
-      }
-
-      _filteredRequests = temp;
-    });
+    // Just trigger a rebuild so the StreamBuilder applies the new local filters
+    setState(() {});
   }
 
   @override
@@ -111,22 +72,106 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             // Tab Bar with new styling
             _buildNewTabBar(),
             
-            // Posts List
+            // Posts List Stream
             Expanded(
-              child: _filteredRequests.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredRequests.length,
-                      itemBuilder: (context, index) {
-                        return PostCard(
-                          request: _filteredRequests[index],
-                          onTap: () {
-                            // Navigate to post detail
-                          },
-                        );
-                      },
-                    ),
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: HelpRequestRepository().getHelpRequestsStream(
+                  status: _selectedFilter == 'All Posts' ? 'All' : _selectedFilter,
+                  category: _selectedCategory,
+                ),
+                builder: (context, snapshot) {
+                  // Loading State
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    );
+                  }
+
+                  // Empty State from Firestore/Fallback
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  // Local Filtering for Radius and Timeline
+                  var temp = snapshot.data!;
+                  
+                  // Distance Radius Filter
+                  temp = temp.where((p) {
+                    final distance = p['distance'] as double?;
+                    return distance == null || distance <= (_currentRadius / 1000.0);
+                  }).toList();
+
+                  // Timeline Filter
+                  final now = DateTime.now();
+                  if (_selectedTimeline == 'Recently Posted') {
+                    temp = temp.where((p) {
+                      final createdAt = p['createdAt'];
+                      if (createdAt is DateTime) return now.difference(createdAt).inHours <= 24;
+                      if (createdAt is Timestamp) return now.difference(createdAt.toDate()).inHours <= 24;
+                      return false;
+                    }).toList();
+                  } else if (_selectedTimeline == 'This Week') {
+                    temp = temp.where((p) {
+                      final createdAt = p['createdAt'];
+                      if (createdAt is DateTime) return now.difference(createdAt).inDays <= 7;
+                      if (createdAt is Timestamp) return now.difference(createdAt.toDate()).inDays <= 7;
+                      return false;
+                    }).toList();
+                  } else if (_selectedTimeline == 'This Month') {
+                    temp = temp.where((p) {
+                      final createdAt = p['createdAt'];
+                      if (createdAt is DateTime) return now.difference(createdAt).inDays <= 30;
+                      if (createdAt is Timestamp) return now.difference(createdAt.toDate()).inDays <= 30;
+                      return false;
+                    }).toList();
+                  }
+
+                  // Empty State after local filters
+                  if (temp.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: temp.length,
+                    itemBuilder: (context, index) {
+                      final post = temp[index];
+                      
+                      // Map the dynamic Firestore dictionary back to our UI HelpRequest structure
+                      final requestObj = HelpRequest(
+                        id: post['id'] ?? '',
+                        authorId: post['authorUid'] ?? '',
+                        author: post['authorName'] ?? 'Unknown',
+                        authorAvatar: post['authorAvatar'] ?? '👤',
+                        category: post['category'] ?? 'General',
+                        description: post['description'] ?? '',
+                        location: post['locationName'] ?? 'Unknown Location',
+                        imageUrls: List<String>.from(post['imageUrls'] ?? []),
+                        status: post['status'] ?? 'Needy',
+                        timePosted: post['createdAt'] is DateTime 
+                            ? post['createdAt'] 
+                            : (post['createdAt'] is Timestamp ? post['createdAt'].toDate() : DateTime.now()),
+                        helpersCount: post['helpersCount'] ?? 0,
+                        distance: post['distance'],
+                        poll: post['hasPoll'] == true && post['poll'] != null 
+                              ? Poll(
+                                  question: post['poll']['question'],
+                                  options: List<String>.from(post['poll']['options']),
+                                  votes: Map<String, int>.from(post['poll']['votes'])
+                                )
+                              : null,
+                      );
+
+                      return PostCard(
+                        request: requestObj,
+                        onTap: () {
+                          // Navigate to post detail
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
